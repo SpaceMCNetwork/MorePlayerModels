@@ -5,6 +5,7 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,3 +24,9 @@ jobs:
 
       - name: Build with Gradle
         run: ./gradlew build
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: MorePlayerModels
+          path: build/libs/*.jar
