@@ -27,6 +27,7 @@ import noppes.mpm.shared.util.NopVector3f;
 import noppes.mpm.util.NoppesStringUtils;
 
 public class MpmPartData {
+    private static final int MAX_URL_LENGTH = 2048;
     public static final NopVector3f WHITE = new NopVector3f(1.0f, 1.0f, 1.0f);
     public ResourceLocation partId;
     public boolean usePlayerSkin = false;
@@ -41,8 +42,9 @@ public class MpmPartData {
     }
 
     public ResourceLocation getTexture() {
-        if (this.getUrlTexture() != null) {
-            return this.getUrlTexture();
+        ResourceLocation urlTexture = this.getUrlTexture();
+        if (urlTexture != null) {
+            return urlTexture;
         }
         if (this.texture != null) {
             return this.texture;
@@ -59,27 +61,35 @@ public class MpmPartData {
             return this.textureUrl;
         }
         if (!this.url.isEmpty()) {
-            ResourceLocation resource = ResourceDownloader.getUrlResourceLocation(this.url, false);
-            File file = ResourceDownloader.getUrlFile(this.url, false);
-            TextureManager texturemanager = Minecraft.getInstance().getTextureManager();
-            AbstractTexture object = texturemanager.getTexture(resource, null);
-            if (object == null) {
-                this.textureUrl = this.getDefaultTexture();
-                ResourceDownloader.load(new ImageDownloadAlt(file, this.url, resource, this.getDefaultTexture(), false, () -> {
+            try {
+                ResourceLocation resource = ResourceDownloader.getUrlResourceLocation(this.url, false);
+                File file = ResourceDownloader.getUrlFile(this.url, false);
+                TextureManager texturemanager = Minecraft.getInstance().getTextureManager();
+                AbstractTexture object = texturemanager.getTexture(resource, null);
+                if (object == null) {
+                    this.textureUrl = this.getDefaultTexture();
+                    ResourceDownloader.load(new ImageDownloadAlt(file, this.url, resource, this.getDefaultTexture(), false, () -> {
+                        this.textureUrl = resource;
+                    }));
+                } else {
                     this.textureUrl = resource;
-                }));
-            } else {
-                this.textureUrl = resource;
+                }
+            } catch (RuntimeException ignored) {
+                this.textureUrl = this.getDefaultTexture();
             }
         }
         return this.textureUrl;
     }
 
     public void setTexture(String s) {
-        this.texture = s == null || s.isEmpty() ? null : ResourceLocation.parse(s);
+        this.texture = s == null || s.isEmpty() ? null : ResourceLocation.tryParse(s);
     }
 
     public void setUrl(String url) {
+        url = url == null ? "" : url;
+        if (url.length() > MAX_URL_LENGTH) {
+            url = url.substring(0, MAX_URL_LENGTH);
+        }
         if (NoppesStringUtils.areEqual(this.url, url)) {
             return;
         }
@@ -91,7 +101,8 @@ public class MpmPartData {
         if (this.texture != null) {
             return this.texture;
         }
-        return this.getPart().texture;
+        MpmPart part = this.getPart();
+        return part != null && part.texture != null ? part.texture : MissingTextureAtlasSprite.getLocation();
     }
 
     public int getColor() {
@@ -110,7 +121,7 @@ public class MpmPartData {
 
     public CompoundTag getNbt() {
         CompoundTag item = new CompoundTag();
-        item.putString("Id", this.partId.toString());
+        item.putString("Id", this.partId == null ? "" : this.partId.toString());
         item.putBoolean("UsePlayerSkin", this.usePlayerSkin);
         item.putString("Url", this.url);
         item.putString("Texture", this.texture == null ? "" : this.texture.toString());
@@ -121,11 +132,21 @@ public class MpmPartData {
     }
 
     public void setNbt(CompoundTag compound) {
-        this.partId = ResourceLocation.parse(compound.getString("Id"));
+        this.partId = ResourceLocation.tryParse(compound.getString("Id"));
         this.usePlayerSkin = compound.getBoolean("UsePlayerSkin");
         this.setUrl(compound.getString("Url"));
         this.setTexture(compound.getString("Texture"));
-        this.color = new NopVector3f(compound.getFloat("ColorR"), compound.getFloat("ColorG"), compound.getFloat("ColorB"));
+        this.color = new NopVector3f(
+                colorComponent(compound.getFloat("ColorR")),
+                colorComponent(compound.getFloat("ColorG")),
+                colorComponent(compound.getFloat("ColorB"))
+        );
+    }
+
+    private static float colorComponent(float value) {
+        if (!Float.isFinite(value)) {
+            return 1.0f;
+        }
+        return Math.max(0.0f, Math.min(1.0f, value));
     }
 }
-

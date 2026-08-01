@@ -28,6 +28,10 @@ import noppes.mpm.constants.BodyPart;
 import noppes.mpm.constants.EnumParts;
 
 public abstract class ModelDataShared {
+    private static final int MAX_PARTS = 256;
+    private static final int MAX_RESOURCE_LOCATION_LENGTH = 256;
+    private static final int MAX_URL_LENGTH = 2048;
+    private static final int MAX_DISPLAY_NAME_LENGTH = 256;
     public ModelPartConfig arm1 = new ModelPartConfig();
     public ModelPartConfig arm2 = new ModelPartConfig();
     public ModelPartConfig body = new ModelPartConfig();
@@ -62,16 +66,17 @@ public abstract class ModelDataShared {
         compound.put("Parts", (Tag)this.oldPartData);
         ListTag list = new ListTag();
         for (MpmPartData e : this.mpmParts) {
-            list.add(e.getNbt());
+            if (e != null && e.partId != null) {
+                list.add(e.getNbt());
+            }
         }
         compound.put("NewParts", (Tag)list);
         return compound;
     }
 
     public void readFromNBT(CompoundTag compound) {
-        int i;
-        String rl = compound.getString("EntityName");
-        this.setEntity(rl.isEmpty() ? null : ResourceLocation.parse(rl));
+        String rl = limit(compound.getString("EntityName"), MAX_RESOURCE_LOCATION_LENGTH);
+        this.setEntity(rl.isEmpty() ? null : ResourceLocation.tryParse(rl));
         this.arm1.readFromNBT(compound.getCompound("ArmsConfig"));
         this.arm2.readFromNBT(compound.getCompound("Arms2Config"));
         this.body.readFromNBT(compound.getCompound("BodyConfig"));
@@ -79,30 +84,68 @@ public abstract class ModelDataShared {
         this.leg2.readFromNBT(compound.getCompound("Legs2Config"));
         this.head.readFromNBT(compound.getCompound("HeadConfig"));
         this.extra = compound.getCompound("ExtraData");
-        this.wingMode = compound.getInt("WingMode");
-        this.url = compound.getString("CustomSkinUrl");
-        this.displayName = compound.getString("DisplayName");
-        ArrayList<MpmPartData> mpmParts = new ArrayList<MpmPartData>();
-        ListTag list = compound.getList("NewParts", 10);
-        for (i = 0; i < list.size(); ++i) {
-            MpmPartData part = new MpmPartData();
-            part.setNbt(list.getCompound(i));
-            if (part.partId.equals((Object)ModelEyeData.RESOURCE) || part.partId.equals((Object)ModelEyeData.RESOURCE_RIGHT) || part.partId.equals((Object)ModelEyeData.RESOURCE_LEFT)) {
-                part = new ModelEyeData();
-                part.setNbt(list.getCompound(i));
+        this.wingMode = compound.getInt("WingMode") == 1 ? 1 : 0;
+        this.url = limit(compound.getString("CustomSkinUrl"), MAX_URL_LENGTH);
+        this.displayName = limit(compound.getString("DisplayName"), MAX_DISPLAY_NAME_LENGTH);
+        ArrayList<MpmPartData> parts = new ArrayList<MpmPartData>();
+        ListTag newParts = compound.getList("NewParts", Tag.TAG_COMPOUND);
+        for (int i = 0; i < Math.min(newParts.size(), MAX_PARTS); ++i) {
+            MpmPartData part = readPart(newParts.getCompound(i));
+            if (part != null) {
+                parts.add(part);
             }
-            MorePlayerModels.proxy.createMpmPartData(part);
-            mpmParts.add(part);
         }
-        this.mpmParts = mpmParts;
-        this.oldPartData = compound.getList("Parts", 10);
+        this.mpmParts = parts;
+        this.oldPartData = copyParts(compound.getList("Parts", Tag.TAG_COMPOUND));
         if (this.mpmParts.isEmpty()) {
-            for (i = 0; i < list.size(); ++i) {
-                this.mpmParts.add(EnumParts.convertOldPart(list.getCompound(i)));
+            for (int i = 0; i < this.oldPartData.size(); ++i) {
+                MpmPartData part = EnumParts.convertOldPart(this.oldPartData.getCompound(i));
+                if (part != null && part.partId != null) {
+                    this.mpmParts.add(part);
+                }
             }
         }
         this.refreshParts();
         this.updateTransate();
+    }
+
+    private static String limit(String value, int maximumLength) {
+        return value.length() > maximumLength ? value.substring(0, maximumLength) : value;
+    }
+
+    private static ListTag copyParts(ListTag source) {
+        ListTag copy = new ListTag();
+        for (int i = 0; i < Math.min(source.size(), MAX_PARTS); ++i) {
+            copy.add(source.getCompound(i).copy());
+        }
+        return copy;
+    }
+
+    private static MpmPartData readPart(CompoundTag compound) {
+        String id = limit(compound.getString("Id"), MAX_RESOURCE_LOCATION_LENGTH);
+        ResourceLocation partId = ResourceLocation.tryParse(id);
+        if (partId == null) {
+            return null;
+        }
+        try {
+            MpmPartData part = isEyePart(partId) ? new ModelEyeData() : new MpmPartData();
+            part.setNbt(compound);
+            if (part.partId == null) {
+                return null;
+            }
+            MorePlayerModels.proxy.createMpmPartData(part);
+            return part;
+        } catch (RuntimeException ignored) {
+            // A profile is user-controlled network data.  Drop one invalid
+            // accessory instead of allowing it to take down a server/client.
+            return null;
+        }
+    }
+
+    private static boolean isEyePart(ResourceLocation id) {
+        return id.equals(ModelEyeData.RESOURCE)
+                || id.equals(ModelEyeData.RESOURCE_RIGHT)
+                || id.equals(ModelEyeData.RESOURCE_LEFT);
     }
 
     public void updateTransate() {
@@ -210,6 +253,9 @@ public abstract class ModelDataShared {
 
     public void refreshParts() {
         this.hiddenParts = this.mpmParts.stream().flatMap(part -> {
+            if (part == null) {
+                return Stream.empty();
+            }
             MpmPart p = part.getPart();
             if (p != null) {
                 return p.hiddenParts.stream();

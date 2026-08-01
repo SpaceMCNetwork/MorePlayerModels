@@ -202,8 +202,9 @@ ISubGuiListener {
     public void save() {
         CompoundTag newCompound = this.playerdata.writeToNBT();
         if (!this.original.equals((Object)newCompound)) {
-            this.playerdata.save();
             this.playerdata.lastEdited = System.currentTimeMillis();
+            newCompound = this.playerdata.writeToNBT();
+            this.playerdata.save();
             Packets.sendServer(new PacketPlayerDataUpdate(newCompound));
             this.original = newCompound;
         }

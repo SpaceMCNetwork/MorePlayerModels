@@ -55,7 +55,7 @@ implements ITextfieldListener {
         this.addButton(new GuiNpcButton(10, this.guiLeft + 272, this.guiTop + 150, 80, 20, "gui.select", button -> {
             ResourceLocation loc = null;
             if (this.playerdata.url != null && !this.playerdata.url.isEmpty() && !this.playerdata.url.startsWith("http")) {
-                loc = ResourceLocation.parse(this.playerdata.url);
+                loc = ResourceLocation.tryParse(this.playerdata.url);
             }
             this.setSubGui(new GuiTextureSelection(this.playerdata, loc, resource -> {
                 this.playerdata.url = resource == null ? "" : resource.toString();

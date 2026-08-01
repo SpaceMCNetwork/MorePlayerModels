@@ -69,12 +69,16 @@ extends MpmPartData {
         this.useLidTexture = compound.getBoolean("UseLidTexture");
         this.mirror = compound.getBoolean("Mirror");
         this.disableBlink = compound.getBoolean("DisableBlink");
-        this.skinType = compound.getInt("SkinType");
-        this.eyeSize = compound.getInt("EyeSize");
+        this.skinType = clamp(compound.getInt("SkinType"), 0, 2);
+        this.eyeSize = clamp(compound.getInt("EyeSize"), 0, 1);
         this.lidColor = ColorUtil.colorToRgb(compound.getInt("SkinColor"));
         this.browColor = ColorUtil.colorToRgb(compound.getInt("BrowColor"));
-        this.eyePos = new NopVector2i(compound.getInt("PositionX"), compound.getInt("PositionY"));
-        this.browThickness = new NopVector3f(1.0f, (float)compound.getInt("BrowThickness") / 10.0f, 1.0f);
+        this.eyePos = new NopVector2i(clamp(compound.getInt("PositionX"), -1, 1), clamp(compound.getInt("PositionY"), -2, 2));
+        this.browThickness = new NopVector3f(1.0f, (float)clamp(compound.getInt("BrowThickness"), 0, 8) / 10.0f, 1.0f);
+    }
+
+    private static int clamp(int value, int minimum, int maximum) {
+        return Math.max(minimum, Math.min(maximum, value));
     }
 
     public void update(Player player) {
@@ -104,4 +108,3 @@ extends MpmPartData {
         return url;
     }
 }
-

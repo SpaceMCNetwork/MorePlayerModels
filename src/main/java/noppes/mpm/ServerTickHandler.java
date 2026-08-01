@@ -34,9 +34,11 @@ public class ServerTickHandler {
         ServerPlayer player = (ServerPlayer)event.getEntity();
         ModelData data = ModelData.get((Player)player);
         ItemStack item = (ItemStack)player.getInventory().items.get(0);
-        if (data.backItem != item) {
-            Packets.send(player, new PacketBackItemUpdate(player.getUUID(), item));
-            data.backItem = item;
+        if (!ItemStack.matches(data.backItem, item)) {
+            // Inventory slots are mutable.  Keep a snapshot so count/component
+            // changes are detected and all tracking clients receive removals.
+            data.backItem = item.copy();
+            Packets.sendNearby(player, new PacketBackItemUpdate(player.getUUID(), data.backItem));
         }
         for (MpmPartData pd : data.mpmParts) {
             if (!(pd instanceof ModelEyeData)) continue;

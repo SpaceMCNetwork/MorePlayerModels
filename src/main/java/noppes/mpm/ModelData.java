@@ -31,6 +31,10 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -60,7 +64,11 @@ import noppes.mpm.util.PixelmonHelper;
 public class ModelData
 extends ModelDataShared
 implements INBTSerializable<CompoundTag> {
-    public static ExecutorService saveExecutor = Executors.newFixedThreadPool(1);
+    public static ExecutorService saveExecutor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "MorePlayerModels profile IO");
+        thread.setDaemon(true);
+        return thread;
+    });
     public boolean resourceInit = false;
     public boolean resourceLoaded = false;
     public ResourceLocation resourceLocation = null;
@@ -88,6 +96,7 @@ implements INBTSerializable<CompoundTag> {
     public long lastEdited = System.currentTimeMillis();
     public UUID analyticsUUID = UUID.randomUUID();
     public String presetName = "Default";
+    private long dataRevision;
     private static ModelData backup = new ModelData();
 
     @Override
@@ -107,10 +116,10 @@ implements INBTSerializable<CompoundTag> {
         String prevUrl = this.url;
         String prevName = this.displayName;
         super.readFromNBT(compound);
-        this.soundType = compound.getShort("SoundType");
+        this.soundType = (short)Math.max(0, Math.min(3, compound.getShort("SoundType")));
         this.lastEdited = compound.getLong("LastEdited");
-        this.modelType = compound.getInt("ModelType");
-        this.presetName = compound.getString("PresetName");
+        this.modelType = Math.max(0, Math.min(2, compound.getInt("ModelType")));
+        this.presetName = limitPresetName(compound.getString("PresetName"));
         if (this.player != null) {
             if (!this.hasEntity()) {
                 this.player.getPersistentData().remove("MPMModel");
@@ -128,10 +137,15 @@ implements INBTSerializable<CompoundTag> {
         if (!prevName.equals(this.displayName) && this.player != null) {
             this.player.refreshDisplayName();
         }
+        ++this.dataRevision;
+    }
+
+    private static String limitPresetName(String name) {
+        return name.length() > 128 ? name.substring(0, 128) : name;
     }
 
     public void setMoveAnimation(int i) {
-        if (i < EnumAnimation.values().length) {
+        if (i >= 0 && i < EnumAnimation.values().length) {
             this.setMoveAnimation(EnumAnimation.values()[i]);
         } else {
             this.setMoveAnimation(EnumAnimation.IDLE);
@@ -157,7 +171,7 @@ implements INBTSerializable<CompoundTag> {
     }
 
     public void setAnimation(int i) {
-        if (i < EnumAnimation.values().length) {
+        if (i >= 0 && i < EnumAnimation.values().length) {
             this.setAnimation(EnumAnimation.values()[i]);
         } else {
             this.setAnimation(EnumAnimation.NONE);
@@ -169,14 +183,17 @@ implements INBTSerializable<CompoundTag> {
     }
 
     public void setAnimation(EnumAnimation ani) {
+        if (ani == null) {
+            ani = EnumAnimation.NONE;
+        }
         if (this.isMovementAnimation(ani)) {
             this.setMoveAnimation(ani);
             return;
         }
         this.animationTime = -1;
+        this.startAnimation = this.animation != ani;
         this.animation = ani;
         this.lastEdited = System.currentTimeMillis();
-        boolean bl = this.startAnimation = this.animation != ani;
         if (this.animation == EnumAnimation.WAVE) {
             this.animationTime = 80;
         }
@@ -265,29 +282,15 @@ implements INBTSerializable<CompoundTag> {
         if (this.player == null) {
             return;
         }
-        Player player = this.player;
+        CompoundTag snapshot = this.writeToNBT();
+        String filename = this.player.getUUID().toString().toLowerCase();
+        if (filename.isEmpty()) {
+            filename = "noplayername";
+        }
+        String profileFilename = filename + ".dat";
         saveExecutor.submit(() -> {
             try {
-                Object filename = player.getUUID().toString().toLowerCase();
-                if (((String)filename).isEmpty()) {
-                    filename = "noplayername";
-                }
-                filename = (String)filename + ".dat";
-                File file = new File(MorePlayerModels.dir, (String)filename + "_new");
-                File file1 = new File(MorePlayerModels.dir, (String)filename + "_old");
-                File file2 = new File(MorePlayerModels.dir, (String)filename);
-                NbtIo.writeCompressed((CompoundTag)this.writeToNBT(), (OutputStream)new FileOutputStream(file));
-                if (file1.exists()) {
-                    file1.delete();
-                }
-                file2.renameTo(file1);
-                if (file2.exists()) {
-                    file2.delete();
-                }
-                file.renameTo(file2);
-                if (file.exists()) {
-                    file.delete();
-                }
+                saveProfile(snapshot, profileFilename);
             }
             catch (Exception e) {
                 LogWriter.except(e);
@@ -299,48 +302,79 @@ implements INBTSerializable<CompoundTag> {
         ModelData data = player.getData(MPMRegistries.MODEL_DATA);
         if (data.player == null) {
             data.player = player;
-            data.backItem = player.getInventory().getItem(0);
+            data.backItem = player.getInventory().getItem(0).copy();
             data.loadPlayerData(player.getUUID());
         }
         return data;
     }
 
     private void loadPlayerData(UUID id) {
+        final long expectedRevision = this.dataRevision;
+        final Player profilePlayer = this.player;
         saveExecutor.submit(() -> {
-            Object filename = id.toString();
-            if (((String)filename).isEmpty()) {
+            String filename = id.toString();
+            if (filename.isEmpty()) {
                 filename = "noplayername";
             }
-            filename = (String)filename + ".dat";
+            filename = filename + ".dat";
+            CompoundTag compound = null;
             try {
-                File file = new File(MorePlayerModels.dir, (String)filename);
-                if (!file.exists()) {
-                    return;
+                Path current = new File(MorePlayerModels.dir, filename).toPath();
+                Path backup = new File(MorePlayerModels.dir, filename + "_old").toPath();
+                if (Files.exists(current)) {
+                    compound = readProfile(current);
+                } else if (Files.exists(backup)) {
+                    compound = readProfile(backup);
                 }
-                CompoundTag compound = NbtIo.readCompressed(new FileInputStream(file), net.minecraft.nbt.NbtAccounter.unlimitedHeap());
-                this.readFromNBT(compound);
-                return;
             }
             catch (Exception e) {
+                LogWriter.except(e);
                 try {
-                    LogWriter.except(e);
-                    try {
-                        File file = new File(MorePlayerModels.dir, (String)filename + "_old");
-                        if (file.exists()) {
-                            return;
-                        }
-                        CompoundTag compound = NbtIo.readCompressed(new FileInputStream(file), net.minecraft.nbt.NbtAccounter.unlimitedHeap());
-                        this.readFromNBT(compound);
+                    Path backup = new File(MorePlayerModels.dir, filename + "_old").toPath();
+                    if (Files.exists(backup)) {
+                        compound = readProfile(backup);
                     }
-                    catch (Exception e2) {
-                        LogWriter.except(e2);
-                    }
-                }
-                catch (Exception e3) {
-                    LogWriter.except(e3);
+                } catch (Exception backupException) {
+                    LogWriter.except(backupException);
                 }
             }
+            if (compound == null || profilePlayer == null) {
+                return;
+            }
+            CompoundTag profile = compound;
+            MorePlayerModels.proxy.executor(profilePlayer, () -> {
+                synchronized (ModelData.this) {
+                    // Never allow a late disk read to overwrite a profile that
+                    // was already updated through a client packet or GUI.
+                    if (ModelData.this.dataRevision == expectedRevision) {
+                        ModelData.this.readFromNBT(profile);
+                    }
+                }
+            });
         });
+    }
+
+    private static CompoundTag readProfile(Path profile) throws Exception {
+        try (InputStream input = Files.newInputStream(profile)) {
+            return NbtIo.readCompressed(input, net.minecraft.nbt.NbtAccounter.unlimitedHeap());
+        }
+    }
+
+    private static void saveProfile(CompoundTag profile, String filename) throws Exception {
+        Path temporary = new File(MorePlayerModels.dir, filename + "_new").toPath();
+        Path backup = new File(MorePlayerModels.dir, filename + "_old").toPath();
+        Path current = new File(MorePlayerModels.dir, filename).toPath();
+        try (OutputStream output = new FileOutputStream(temporary.toFile())) {
+            NbtIo.writeCompressed(profile, output);
+        }
+        if (Files.exists(current)) {
+            Files.move(current, backup, StandardCopyOption.REPLACE_EXISTING);
+        }
+        try {
+            Files.move(temporary, current, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException ignored) {
+            Files.move(temporary, current, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     @Override

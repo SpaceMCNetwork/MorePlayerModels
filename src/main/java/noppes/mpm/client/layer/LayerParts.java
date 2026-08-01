@@ -16,6 +16,7 @@
 package noppes.mpm.client.layer;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import java.util.ArrayList;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.player.AbstractClientPlayer;
@@ -47,10 +48,15 @@ extends RenderLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> {
 
     public void render(PoseStack mStack, MultiBufferSource typeBuffer, int lightmapUV, AbstractClientPlayer player, float limbSwing, float limbSwingAmount, float partialTicks, float age, float netHeadYaw, float headPitch) {
         ModelData data = ModelData.get((Player)player);
-        for (MpmPartData part : data.mpmParts) {
+        for (MpmPartData part : new ArrayList<>(data.mpmParts)) {
+            if (part == null) {
+                continue;
+            }
             MpmPart mp = part.getPart();
-            if (mp == null || mp.renderType == PartRenderType.NONE || !mp.isEnabled) continue;
-            MpmPartAbstractClient partc = (MpmPartAbstractClient)mp;
+            if (!(mp instanceof MpmPartAbstractClient partc) || mp.renderType == PartRenderType.NONE || !mp.isEnabled) continue;
+            if (!(part.clientData instanceof MpmPartDataClient)) {
+                part.clientData = new MpmPartDataClient<>();
+            }
             this.rotate((MpmPartDataClient)part.clientData, data, partc, player, (PlayerModel)this.getParentModel(), limbSwing, limbSwingAmount, partialTicks, age, netHeadYaw, headPitch);
             LayerParts.renderPart(part, partc, mStack, typeBuffer, lightmapUV, player, (PlayerModel)this.getParentModel(), data);
         }
@@ -220,8 +226,10 @@ extends RenderLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> {
                 zRot = Mth.cos((float)(age * 0.09f)) * 0.05f + 0.05f;
                 xRot = Mth.sin((float)(age * 0.067f)) * 0.05f;
             }
-            modelPart.setRot(modelPart.oriRot.add(xRot, xRot, zRot));
-            modelPartL.setRot(modelPartL.oriRot.add(xRot, -xRot, -zRot));
+            if (modelPart != null && modelPartL != null) {
+                modelPart.setRot(modelPart.oriRot.add(xRot, xRot, zRot));
+                modelPartL.setRot(modelPartL.oriRot.add(xRot, -xRot, -zRot));
+            }
         }
         if (part.animationType == PartBehaviorType.WINGS2) {
             float yRot;
@@ -235,9 +243,10 @@ extends RenderLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> {
             } else {
                 yRot = Mth.sin((float)(age * 0.07f)) * 0.44f;
             }
-            modelPart.setRot(modelPart.oriRot.add(0.0f, yRot, 0.0f));
-            modelPartL.setRot(modelPartL.oriRot.add(0.0f, -yRot, 0.0f));
+            if (modelPart != null && modelPartL != null) {
+                modelPart.setRot(modelPart.oriRot.add(0.0f, yRot, 0.0f));
+                modelPartL.setRot(modelPartL.oriRot.add(0.0f, -yRot, 0.0f));
+            }
         }
     }
 }
-

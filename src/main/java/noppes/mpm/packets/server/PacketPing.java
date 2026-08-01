@@ -54,23 +54,25 @@ public class PacketPing implements CustomPacketPayload {
 
     public static void handle(PacketPing msg, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            ItemStack back;
             ServerPlayer player = (ServerPlayer)ctx.player();
-            if (msg.version == MorePlayerModels.Version) {
-                ModelData data = ModelData.get((Player)player);
-                data.readFromNBT(msg.data);
-                if (!player.level().getGameRules().getBoolean(MorePlayerModels.ALLOW_ENTITY_MODELS)) {
-                    data.setEntity(null);
-                }
-                data.save();
-                Packets.sendNearby((Entity)player, new PacketPlayerDataSend(player.getUUID(), data.writeToNBT()));
+            if (msg.version != MorePlayerModels.Version) {
+                Packets.sendHandshake(player, new PacketPong(MorePlayerModels.Version));
+                return;
             }
-            if (!(back = (ItemStack)player.getInventory().items.get(0)).isEmpty()) {
-                Packets.sendNearby((Entity)player, new PacketBackItemUpdate(player.getUUID(), back));
-            }
+
+            // Enable normal distribution before the initial state broadcast.
             MorePlayerModels.HasServerSide = true;
+            ModelData data = ModelData.get((Player)player);
+            data.readFromNBT(msg.data);
+            if (!player.level().getGameRules().getBoolean(MorePlayerModels.ALLOW_ENTITY_MODELS)) {
+                data.setEntity(null);
+            }
+            data.save();
+            Packets.sendNearby((Entity)player, new PacketPlayerDataSend(player.getUUID(), data.writeToNBT()));
+            ItemStack back = player.getInventory().getItem(0).copy();
+            data.backItem = back;
+            Packets.sendNearby((Entity)player, new PacketBackItemUpdate(player.getUUID(), back));
             Packets.send(player, new PacketPong(MorePlayerModels.Version));
         });
     }
 }
-

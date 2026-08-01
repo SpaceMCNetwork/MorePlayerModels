@@ -17,10 +17,11 @@ public class CommonProxy {
     }
 
     public void executor(Player player, Runnable runnable) {
-        player.getServer().execute(runnable);
+        if (player.getServer() != null) {
+            player.getServer().execute(runnable);
+        }
     }
 
     public void createMpmPartData(MpmPartData data) {
     }
 }
-
