@@ -11,10 +11,8 @@
 package noppes.mpm.packets.client;
 
 import java.util.UUID;
-import net.minecraft.client.Minecraft;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -29,22 +27,24 @@ public record PacketBackItemUpdate(UUID playerId, ItemStack item) implements Cus
     public CustomPacketPayload.Type<? extends CustomPacketPayload> type() { return TYPE; }
     public static void encode(RegistryFriendlyByteBuf buf, PacketBackItemUpdate msg) {
         buf.writeUUID(msg.playerId);
-        net.minecraft.world.item.ItemStack.STREAM_CODEC.encode(buf, msg.item);
+        // The back slot is allowed to be empty.  STREAM_CODEC intentionally
+        // rejects ItemStack.EMPTY, which made clearing the first hotbar slot
+        // disconnect the receiver with "Empty ItemStack not allowed".
+        ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, msg.item);
     }
 
     public static PacketBackItemUpdate decode(RegistryFriendlyByteBuf buf) {
-        return new PacketBackItemUpdate(buf.readUUID(), net.minecraft.world.item.ItemStack.STREAM_CODEC.decode(buf));
+        return new PacketBackItemUpdate(buf.readUUID(), ItemStack.OPTIONAL_STREAM_CODEC.decode(buf));
     }
 
     public static void handle(PacketBackItemUpdate msg, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            Player pl = Minecraft.getInstance().level.getPlayerByUUID(msg.playerId);
+            Player pl = ClientPacketHelper.getPlayer(msg.playerId);
             if (pl == null) {
                 return;
             }
             ModelData data = ModelData.get(pl);
-            data.backItem = msg.item;
+            data.backItem = msg.item.copy();
         });
     }
 }
-

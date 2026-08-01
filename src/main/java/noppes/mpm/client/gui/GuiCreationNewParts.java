@@ -110,8 +110,8 @@ ICustomScrollListener {
 
     public GuiCreationNewParts(ModelData data) {
         this.data = data;
-        this.menus = MpmPartReader.PARTS.values().stream().map(p -> p.menu).distinct().collect(Collectors.toList());
-        if (active.isEmpty()) {
+        this.menus = MpmPartReader.PARTS.values().stream().map(p -> p.menu).distinct().sorted().collect(Collectors.toList());
+        if (!this.menus.isEmpty() && (active.isEmpty() || !this.menus.contains(active))) {
             active = this.menus.get(0);
         }
         this.closeOnEsc = true;
@@ -249,7 +249,7 @@ ICustomScrollListener {
                 this.all.add(entry.getValue());
             }
             for (MpmPart p : this.all) {
-                this.data = GuiCreationNewParts.this.data.mpmParts.stream().filter(t -> t.partId.equals((Object)p.id)).findFirst().orElse(null);
+                this.data = GuiCreationNewParts.this.data.mpmParts.stream().filter(t -> t != null && p.id.equals(t.partId)).findFirst().orElse(null);
                 if (this.data == null) continue;
                 this.part = p;
                 break;
@@ -278,6 +278,7 @@ ICustomScrollListener {
             PoseStack matrixstack = graphics.pose();
             matrixstack.pushPose();
             matrixstack.translate((double)(this.getX() + 10), (double)(this.getY() + 10), 150.0);
+            matrixstack.mulPose(new Matrix4f().scaling(1.0f, 1.0f, -1.0f));
             EntityRenderDispatcher entityrenderermanager = minecraft.getEntityRenderDispatcher();
             entityrenderermanager.setRenderShadow(false);
             MultiBufferSource.BufferSource irendertypebuffer$impl = graphics.bufferSource();
@@ -570,8 +571,9 @@ ICustomScrollListener {
             this.addButton(new GuiNpcButton(66, this.guiLeft + 288, this.guiTop + 4, 20, 20, "X", b -> this.close()));
         }
 
-        public void renderBackground(GuiGraphics graphics) {
-            super.renderBackground(graphics, 0, 0, 0);
+        @Override
+        public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            super.renderBackground(graphics, mouseX, mouseY, partialTick);
             graphics.fill(this.guiLeft, this.guiTop, this.guiLeft + this.xSize, this.guiTop + this.ySize, -3750202);
             graphics.hLine(this.guiLeft, this.guiLeft + this.xSize, this.guiTop, -1);
             graphics.hLine(this.guiLeft, this.guiLeft + this.xSize, this.guiTop + this.ySize, -1);
@@ -660,8 +662,9 @@ ICustomScrollListener {
             this.addButton(new GuiNpcButton(66, this.guiLeft + 276, this.guiTop + 4, 20, 20, "X", b -> this.close()));
         }
 
-        public void renderBackground(GuiGraphics graphics) {
-            super.renderBackground(graphics, 0, 0, 0);
+        @Override
+        public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            super.renderBackground(graphics, mouseX, mouseY, partialTick);
             graphics.fill(this.guiLeft, this.guiTop, this.guiLeft + this.xSize, this.guiTop + this.ySize, -3750202);
             graphics.hLine(this.guiLeft, this.guiLeft + this.xSize, this.guiTop, -1);
             graphics.hLine(this.guiLeft, this.guiLeft + this.xSize, this.guiTop + this.ySize, -1);

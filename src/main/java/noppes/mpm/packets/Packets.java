@@ -1,6 +1,7 @@
 package noppes.mpm.packets;
 
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -36,7 +37,14 @@ public final class Packets {
     }
 
     public static void sendDelayed(ServerPlayer player, CustomPacketPayload msg, int delay) {
-        if (MorePlayerModels.HasServerSide) MPMScheduler.runTack(() -> PacketDistributor.sendToPlayer(player, msg), delay);
+        if (MorePlayerModels.HasServerSide) {
+            MPMScheduler.runTack(() -> {
+                MinecraftServer server = player.getServer();
+                if (server != null) {
+                    server.execute(() -> PacketDistributor.sendToPlayer(player, msg));
+                }
+            }, delay);
+        }
     }
 
     public static void sendNearby(Entity entity, CustomPacketPayload msg) {
@@ -49,5 +57,10 @@ public final class Packets {
 
     public static void sendServer(CustomPacketPayload msg) {
         if (MorePlayerModels.HasServerSide) PacketDistributor.sendToServer(msg);
+    }
+
+    /** A ping itself proves that this connection understands MPM payloads. */
+    public static void sendHandshake(ServerPlayer player, CustomPacketPayload msg) {
+        PacketDistributor.sendToPlayer(player, msg);
     }
 }

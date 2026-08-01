@@ -59,12 +59,19 @@ public class WebApi {
     private long playerLastUpdated = 0L;
     private int errors = 0;
     public static final WebApi instance = new WebApi();
-    private ExecutorService executor = Executors.newSingleThreadExecutor();
-    public boolean isRunning = false;
+    private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "MorePlayerModels Web API");
+        thread.setDaemon(true);
+        return thread;
+    });
+    public volatile boolean isRunning = false;
 
     public void run() {
         Minecraft mc = Minecraft.getInstance();
         if (MorePlayerModels.HasServerSide) {
+            return;
+        }
+        if (mc.player == null || ClientEventHandler.playerList == null) {
             return;
         }
         if (this.errors > 3 || this.isRunning) {
@@ -130,8 +137,17 @@ public class WebApi {
                 JsonObject obj = (JsonObject)this.parser.parse(data);
                 for (Map.Entry ent : obj.entrySet()) {
                     ModelData mdata = (ModelData)map.get(ent.getKey());
-                    mdata.readFromNBT(TagParser.parseTag((String)GzipUtil.decompressFromString(((JsonElement)ent.getValue()).getAsString())));
-                    mdata.webapiActive = true;
+                    if (mdata == null) {
+                        continue;
+                    }
+                    CompoundTag profile = TagParser.parseTag((String)GzipUtil.decompressFromString(((JsonElement)ent.getValue()).getAsString()));
+                    mc.execute(() -> {
+                        if (mc.level == null) {
+                            return;
+                        }
+                        mdata.readFromNBT(profile);
+                        mdata.webapiActive = true;
+                    });
                 }
             }
             catch (Exception e) {

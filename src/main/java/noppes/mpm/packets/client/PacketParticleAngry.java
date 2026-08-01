@@ -12,7 +12,6 @@
 package noppes.mpm.packets.client;
 
 import java.util.UUID;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -45,7 +44,7 @@ public class PacketParticleAngry implements CustomPacketPayload {
 
     public static void handle(PacketParticleAngry msg, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            Player player = Minecraft.getInstance().level.getPlayerByUUID(msg.playerId);
+            Player player = ClientPacketHelper.getPlayer(msg.playerId);
             if (player == null) {
                 return;
             }
@@ -61,4 +60,3 @@ public class PacketParticleAngry implements CustomPacketPayload {
         });
     }
 }
-

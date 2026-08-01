@@ -58,7 +58,7 @@ public class ServerEventHandler {
         ServerPlayer player = (ServerPlayer)event.getEntity();
         ModelData data = ModelData.get(target);
         Packets.sendDelayed(player, new PacketPlayerDataSend(target.getUUID(), data.writeToNBT()), 100);
-        Packets.sendDelayed(player, new PacketBackItemUpdate(target.getUUID(), (ItemStack)player.getInventory().items.get(0)), 100);
+        Packets.sendDelayed(player, new PacketBackItemUpdate(target.getUUID(), target.getInventory().getItem(0).copy()), 100);
     }
 
     @SubscribeEvent

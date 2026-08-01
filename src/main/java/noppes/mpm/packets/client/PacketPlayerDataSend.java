@@ -46,17 +46,19 @@ public class PacketPlayerDataSend implements CustomPacketPayload {
 
     public static void handle(PacketPlayerDataSend msg, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            Player pl = Minecraft.getInstance().level.getPlayerByUUID(msg.playerId);
+            Player pl = ClientPacketHelper.getPlayer(msg.playerId);
             if (pl == null) {
                 return;
             }
             ModelData data = ModelData.get(pl);
             data.readFromNBT(msg.compound);
-            data.save();
             if (pl == Minecraft.getInstance().player) {
+                // Remote profiles are display-only on this client.  Persisting
+                // each tracking update caused unnecessary disk writes and left
+                // stale remote profiles in the local MPM directory.
                 data.lastEdited = System.currentTimeMillis();
+                data.save();
             }
         });
     }
 }
-

@@ -10,7 +10,6 @@
 package noppes.mpm.packets.client;
 
 import java.util.UUID;
-import net.minecraft.client.Minecraft;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -41,7 +40,7 @@ public class PacketParticleLove implements CustomPacketPayload {
 
     public static void handle(PacketParticleLove msg, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            Player pl = Minecraft.getInstance().level.getPlayerByUUID(msg.playerId);
+            Player pl = ClientPacketHelper.getPlayer(msg.playerId);
             if (pl == null) {
                 return;
             }
@@ -50,4 +49,3 @@ public class PacketParticleLove implements CustomPacketPayload {
         });
     }
 }
-

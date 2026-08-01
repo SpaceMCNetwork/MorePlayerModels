@@ -3,7 +3,7 @@
 	"parent": "moreplayermodels:parts/legs/knight_armor_legs.json",
 	"render_type": "bedrock",
 	"hidden_parts": [],
-	"texture": "moreplayermodels:textures/armor/knight_armor.png",
+	"texture": "moreplayermodels:textures/parts/armor/knight_armor.png",
 	"body_part": "legs",
 	"menu": "part.legs",
 	"animation_type": "legs",

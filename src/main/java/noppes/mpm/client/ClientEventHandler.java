@@ -42,7 +42,6 @@ import com.google.common.base.Predicate;
 import com.google.common.base.Predicates;
 import com.mojang.blaze3d.platform.InputConstants;
 import java.util.List;
-import java.util.Objects;
 import java.util.stream.Collectors;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
@@ -56,7 +55,6 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
@@ -67,7 +65,7 @@ import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.event.PlayLevelSoundEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
-import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
+import net.neoforged.neoforge.event.entity.player.AttackEntityEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.LogicalSide;
@@ -133,7 +131,7 @@ public class ClientEventHandler {
             return;
         }
         ResourceLocation sound = null;
-        if (event.getSound() == SoundEvents.PLAYER_HURT && !player.isDeadOrDying() && !((LivingEntityMixin)player).isDead()) {
+        if (event.getSound().is(BuiltInRegistries.SOUND_EVENT.getKey(SoundEvents.PLAYER_HURT)) && !player.isDeadOrDying() && !((LivingEntityMixin)player).isDead()) {
             if (data.soundType == 1) {
                 sound = female_hurt;
             } else if (data.soundType == 2) {
@@ -142,7 +140,7 @@ public class ClientEventHandler {
                 sound = goblin_hurt;
             }
         }
-        if (event.getSound() == SoundEvents.PLAYER_DEATH) {
+        if (event.getSound().is(BuiltInRegistries.SOUND_EVENT.getKey(SoundEvents.PLAYER_DEATH))) {
             if (data.soundType == 1) {
                 sound = female_death;
             } else if (data.soundType == 2) {
@@ -157,20 +155,8 @@ public class ClientEventHandler {
     }
 
     @SubscribeEvent
-    public void onAttack(LivingIncomingDamageEvent event) {
-        LocalPlayer player;
-        block12: {
-            block11: {
-                Entity entity;
-                if (event.getAmount() < 1.0f || !event.getSource().type().msgId().equals("player") || !((entity = event.getSource().getEntity()) instanceof LocalPlayer)) {
-                    return;
-                }
-                player = (LocalPlayer)entity;
-                if (event.getEntity().getHealth() < 0.0f) break block11;
-                float f = player.getNoActionTime();
-                Objects.requireNonNull(player);
-                if (!(f > 20.0f / 2.0f)) break block12;
-            }
+    public void onAttack(AttackEntityEvent event) {
+        if (!(event.getEntity() instanceof LocalPlayer player)) {
             return;
         }
         ModelData data = ModelData.get((Player)player);
@@ -187,7 +173,7 @@ public class ClientEventHandler {
         }
         if (sound != null) {
             float pitch = (player.getRandom().nextFloat() - player.getRandom().nextFloat()) * 0.2f + 1.0f;
-            player.level().playSound((Player)player, player.blockPosition(), SoundEvent.createVariableRangeEvent((ResourceLocation)sound), SoundSource.PLAYERS, 0.9876543f, pitch);
+            player.playSound(SoundEvent.createVariableRangeEvent((ResourceLocation)sound), 0.9876543f, pitch);
         }
     }
 
@@ -258,7 +244,7 @@ public class ClientEventHandler {
     }
 
     public static void processAnimation(int type) {
-        if (type < 0) {
+        if (type < 0 || type >= EnumAnimation.values().length || Minecraft.getInstance().player == null) {
             return;
         }
         PacketAnimationUpdate.setAnimation((Player)Minecraft.getInstance().player, EnumAnimation.values()[type]);
@@ -278,6 +264,10 @@ public class ClientEventHandler {
                 this.prevWorld = null;
                 SkinUtil.lastSkinTick = -20L;
             }
+            MorePlayerModels.HasServerSide = false;
+            return;
+        }
+        if (mc.player == null) {
             return;
         }
         if (this.prevWorld != mc.level) {

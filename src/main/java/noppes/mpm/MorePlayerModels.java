@@ -99,6 +99,7 @@ public class MorePlayerModels {
         modEventBus.addListener(Packets::register);
         if (FMLEnvironment.dist == Dist.CLIENT) {
             modEventBus.addListener(ClientProxy::registerReloadListeners);
+            modEventBus.addListener(ClientProxy::addPlayerLayers);
         }
         modEventBus.addListener(this::setupClient);
         modEventBus.addListener(this::setup);

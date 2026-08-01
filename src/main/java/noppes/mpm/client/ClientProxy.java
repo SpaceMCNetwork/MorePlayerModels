@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.PlayerModel;
+import net.minecraft.client.model.geom.EntityModelSet;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -51,11 +52,13 @@ import net.minecraft.client.renderer.texture.SimpleTexture;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.resources.PlayerSkin;
 import net.minecraft.server.packs.resources.PreparableReloadListener;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraft.server.packs.resources.ResourceProvider;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
+import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.minecraft.core.registries.BuiltInRegistries;
 import noppes.mpm.CommonProxy;
@@ -121,20 +124,39 @@ extends CommonProxy {
         }
     }
 
+    @Override
+    public void postLoad() {
+        // Player renderers are populated after load-complete. They are wired
+        // through EntityRenderersEvent.AddLayers below instead of racing an
+        // empty skin-renderer map here.
+    }
+
+    /** Installs MPM layers after NeoForge has created both player renderers. */
+    public static void addPlayerLayers(EntityRenderersEvent.AddLayers event) {
+        for (PlayerSkin.Model skin : event.getSkins()) {
+            PlayerRenderer renderer = event.getSkin(skin);
+            if (renderer != null) {
+                ClientProxy.addLayers(renderer, skin == PlayerSkin.Model.SLIM, event.getEntityModels());
+            }
+        }
+    }
+
     public static void fixModels() {
         Minecraft mc = Minecraft.getInstance();
         EntityRenderDispatcher manager = mc.getEntityRenderDispatcher();
         Map map = manager.getSkinMap();
         for (Object key : map.keySet()) {
             EntityRenderer render = (EntityRenderer)map.get(key);
-            ClientProxy.addLayers((PlayerRenderer)render, key.toString().toLowerCase().contains("slim"));
+            if (render instanceof PlayerRenderer playerRenderer) {
+                ClientProxy.addLayers(playerRenderer, key.toString().toLowerCase().contains("slim"), mc.getEntityModels());
+            }
         }
     }
 
     /*
      * WARNING - Removed try catching itself - possible behaviour change.
      */
-    private static void addLayers(PlayerRenderer playerRender, boolean slim) {
+    private static void addLayers(PlayerRenderer playerRender, boolean slim, EntityModelSet entityModels) {
         List list;
         boolean hasMPMLayers = false;
         List list2 = list = ((LivingRenderer2Mixin)playerRender).getLayers();
@@ -145,20 +167,24 @@ extends CommonProxy {
                 ((LayerInterface)layer2).setBase((PlayerModel)playerRender.getModel());
                 hasMPMLayers = true;
             }
+            ArmorLayerMixin foundArmorLayer = (ArmorLayerMixin)list.stream()
+                    .filter(t -> t instanceof HumanoidArmorLayer)
+                    .findAny()
+                    .orElse(null);
             if (slim) {
-                armorLayerSlim = (ArmorLayerMixin)list.stream().filter(t -> t instanceof HumanoidArmorLayer).findAny().get();
+                armorLayerSlim = foundArmorLayer;
             } else {
-                armorLayer = (ArmorLayerMixin)list.stream().filter(t -> t instanceof HumanoidArmorLayer).findAny().get();
+                armorLayer = foundArmorLayer;
             }
             if (hasMPMLayers) {
                 return;
             }
             list.removeIf(layer -> layer instanceof CapeLayer);
             list.removeIf(layer -> layer instanceof ElytraLayer);
-            list.add(1, new LayerHeadwear(playerRender));
+            list.add(Math.min(1, list.size()), new LayerHeadwear(playerRender));
             list.add(new LayerCapeMPM(playerRender));
             list.add(new LayerBackItem(playerRender));
-            list.add(new LayerElytraAlt(playerRender, Minecraft.getInstance().getEntityModels()));
+            list.add(new LayerElytraAlt(playerRender, entityModels));
             list.add(new LayerParts(playerRender));
         }
     }
@@ -213,7 +239,7 @@ extends CommonProxy {
             try {
                 meta.createNewFile();
                 BufferedWriter writer = new BufferedWriter(new FileWriter(meta));
-                writer.write("{\n    \"pack\": {\n        \"description\": \"moreplayermodels map resource pack\",\n        \"pack_format\": 6\n    }\n}");
+                writer.write("{\n    \"pack\": {\n        \"description\": \"moreplayermodels map resource pack\",\n        \"pack_format\": 34\n    }\n}");
                 writer.close();
             }
             catch (IOException e) {
