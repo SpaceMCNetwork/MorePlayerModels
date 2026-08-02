@@ -47,7 +47,7 @@ extends RenderLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> {
      * model anchor.  This is model-space Y; the entity renderer flips Y, so a
      * positive value moves an addon downward on screen.
      */
-    private static final float ADDON_ANCHOR_Y_OFFSET = 0.025f;
+    private static final float ADDON_ANCHOR_Y_OFFSET = 0.02f;
 
     public LayerParts(PlayerRenderer render) {
         super((RenderLayerParent)render);
