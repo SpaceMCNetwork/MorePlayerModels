@@ -60,8 +60,9 @@ extends MpmPartAbstractClient {
             float f = 0.0625f;
             mStack.translate(-this.rotatePoint.x * f, -this.rotatePoint.y * f, -this.rotatePoint.z * f);
             mStack.scale(this.scale.x, this.scale.y, this.scale.z);
+            int color = 0xFF000000 | data.getColor();
             for (ModelPart modelpart : children.values()) {
-                modelpart.render(mStack, c, lightmapUV, OverlayTexture.NO_OVERLAY);
+                modelpart.render(mStack, c, lightmapUV, OverlayTexture.NO_OVERLAY, color);
             }
         }
         mStack.popPose();
